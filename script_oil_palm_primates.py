@@ -549,7 +549,7 @@ mat_suit_low[where(mat_suit_low>0)]=8-mat_suit_low[where(mat_suit_low>0)]
 
 
 
-mat_suit_high = gdal_array.LoadFile('./various_rasters/suitability_low.tif')
+mat_suit_high = gdal_array.LoadFile('./various_rasters/suitability_high.tif')
 mat_suit_high*=(mat_suit_high<8)	#9 is water, 8 is not suitable
 mat_suit_high*=mat_land_use
 mat_suit_high[where(mat_conc>0)]=0
@@ -629,7 +629,7 @@ res_mat_low[where(mat_pa!=0)]=10
 res_mat_low*=(mat_suit_low>0)
 
 out=rasterio.open('./various_rasters/areas_of_compromise_low.tif', 'w', **meta)
-out.write(res_mat.astype(rasterio.uint8),1)
+out.write(res_mat_low.astype(rasterio.uint8),1)
 out.close()
 
 
@@ -638,7 +638,7 @@ res_mat_high[where(mat_pa!=0)]=10
 res_mat_high*=(mat_suit_high>0)
 
 out=rasterio.open('./various_rasters/areas_of_compromise_high.tif', 'w', **meta)
-out.write(res_mat.astype(rasterio.uint8),1)
+out.write(res_mat_high.astype(rasterio.uint8),1)
 out.close()
 
 
@@ -662,7 +662,6 @@ for i in range(11):
 
 
 out.close()
-
 
 
 
@@ -1194,7 +1193,7 @@ out.close()
 
 
 
-###MAKE FIGS 3-4
+###MAKE FIGS 3-4 and supplementary figures
 
 os.system("Rscript ./make_plots.R")
 
