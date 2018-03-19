@@ -22,7 +22,7 @@ All the expected output can be downloaded from Zenodo \[DOI: [10.5281/zenodo.120
 
 ## Versioning and archiving on Zenodo
 
-The development version of this repository is available on GitHub at https://github.com/giovannistrona/oil-palm-primates. All versions of this repository, including the last release, are archived on Zenodo: \[DOI: [10.5281/zenodo.1200265](https://doi.org/10.5281/zenodo.1200265)\].
+The development version of this repository is available on GitHub at https://github.com/giovannistrona/oil-palm-primates. All versions of this repository, including the last release, are archived on Zenodo: \[DOI: [10.5281/zenodo.1200339](https://doi.org/10.5281/zenodo.1200339)\].
 
 ## Figure
 
