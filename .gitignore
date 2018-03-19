@@ -1,6 +1,10 @@
 EXPECTED_OUTPUT/
 INPUT_DATA/
 
+# Temporary/Backup files
+*~
+*.Rproj
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -102,3 +106,4 @@ ENV/
 
 # mypy
 .mypy_cache/
+.Rproj.user
