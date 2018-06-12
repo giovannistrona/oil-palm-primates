@@ -8,6 +8,7 @@ from random import random,sample,shuffle
 from rasterio import features
 from rasterio.features import shapes
 from shapely.geometry import shape,mapping
+from shapely.geometry import Polygon as Pol
 from shapely.wkb import loads
 import fiona
 import os
@@ -18,6 +19,9 @@ import shapely.ops as ops
 import numpy
 from osgeo import osr, ogr, gdal
 import numpy as np
+import itertools
+
+
 
 ####for maps
 from colormaps import plasma
@@ -25,6 +29,7 @@ from matplotlib.patches import Polygon
 from mpl_toolkits.basemap import Basemap
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 
 
@@ -36,6 +41,11 @@ if not os.path.exists('./various_rasters'):
 
 if not os.path.exists('./primate_rasters'):
 	os.makedirs('./primate_rasters')
+
+
+if not os.path.exists('./primate_range_reduction_figures'):
+	os.makedirs('./primate_range_reduction_figures')
+
 
 if not os.path.exists('./results'):
 	os.makedirs('./results')
@@ -60,6 +70,7 @@ def create_filtered_shapefile(value, filter_field, in_shapefile,out_shapefile):
 	out_layer = out_ds.CopyLayer(input_layer, str(value))
 	del input_layer, out_layer, out_ds
 	return out_shapefile
+
 
 
 # Filter
@@ -121,7 +132,7 @@ outDataSet = None
 # https://pcjericks.github.io/py-gdalogr-cookbook/raster_layers.html#convert-an-ogr-file-to-a-raster
 
 # Define pixel_size and NoData value of new raster
-pixel_size = 1000
+pixel_size = 10000
 NoData_value = 0
 
 # Filename of input OGR file
@@ -185,7 +196,6 @@ referencefile = './various_rasters/africa.tif'#Path to reference file
 reference = gdal.Open(referencefile, gdalconst.GA_ReadOnly)
 referenceProj = reference.GetProjection()
 referenceTrans = reference.GetGeoTransform()
-#bandreference = reference.GetRasterBand(1)    
 x = reference.RasterXSize 
 y = reference.RasterYSize
 
@@ -206,7 +216,7 @@ output = driver.Create(outputfile,x,y,1,bandreference.DataType)
 output.SetGeoTransform(referenceTrans)
 output.SetProjection(referenceProj)
 
-gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_NearestNeighbour)
+gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_Mode)
 
 del output
 
@@ -225,7 +235,7 @@ output = driver.Create(outputfile,x,y,1,bandreference.DataType)
 output.SetGeoTransform(referenceTrans)
 output.SetProjection(referenceProj)
 
-gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_NearestNeighbour)
+gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_Mode)
 
 del output
 
@@ -247,7 +257,7 @@ output = driver.Create(outputfile,x,y,1,bandreference.DataType)
 output.SetGeoTransform(referenceTrans)
 output.SetProjection(referenceProj)
 
-gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_NearestNeighbour)
+gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_Mode)
 
 del output
 
@@ -264,13 +274,12 @@ outputfile = './various_rasters/suitability_high.tif'#Path to output file
 driver= gdal.GetDriverByName('GTiff')
 
 bandreference = input.GetRasterBand(1) 
-#dst = gdal.GetDriverByName('GTiff').Create(dst_filename, wide, high, 1, gdalconst.GDT_Int16)
 
 output = driver.Create(outputfile,x,y,1,bandreference.DataType)
 output.SetGeoTransform(referenceTrans)
 output.SetProjection(referenceProj)
 
-gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_NearestNeighbour)
+gdal.ReprojectImage(input,output,inputProj,referenceProj,gdalconst.GRA_Mode)
 
 del output
 
@@ -330,7 +339,6 @@ sss=mat.shape
 
 meta = rst.meta.copy()
 meta.update(compress='lzw')
-#meta.update(dtype='uint32')
 
 
 openShape = ogr.Open("./continents/continent.shp")
@@ -444,6 +452,16 @@ for i in records:
 
 
 
+#make dict spp, iucn status
+prim_iucn_status_dict = []
+for i in ccc:
+	if i[18] == 'PRIMATES':
+		prim_iucn_status_dict.append([i[1],i[22]])
+
+
+
+prim_iucn_status_dict = dict(prim_iucn_status_dict)
+
 
 #create a dictionary to convert IUCN threat values into numerical values, according to a geometric progression; data deficient (DD) records are given conservatively the same value as least concern (LC) ones
 
@@ -458,7 +476,6 @@ sc=0
 for element in layers:
 	if ccc[sc][18]=='PRIMATES':
 		sh=loads(element.GetGeometryRef().ExportToWkb())
-		#sp=ccc[sc][1]
 		iucn_sc=iucn[ccc[sc][22]]
 		try:
 			for pol in sh:
@@ -477,6 +494,7 @@ for element in layers:
 
 
 
+###A few small ranged species resulted in empty tifs...doublecheck; perhaps add all_touched = True to features.rasterize; perhaps are coastal species? 
 
 spp=sorted(list(set([i[1] for i in GEOM_PRI])))
 
@@ -506,6 +524,7 @@ out.close()
 
 
 
+
 #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ###COMPUTE AREAS OF COMPROMISE
 #####make combined mask
@@ -522,6 +541,25 @@ mat_land_use[where(mat_land_use==200)]=0
 mat_land_use[where(mat_land_use==255)]=0
 mat_land_use[where(mat_land_use==90)]=1
 mat_land_use[where(mat_land_use!=0)]=1
+
+'''
+#forest_mask
+fmask = gdal_array.LoadFile('./various_rasters/land_use.tif')
+fmask[where(fmask==40)]=0
+fmask[where(fmask==50)]=0
+fmask[where(fmask==60)]=0
+fmask[where(fmask==70)]=0
+fmask[where(fmask==80)]=0
+fmask[where(fmask==81)]=0
+fmask[where(fmask==200)]=0
+fmask[where(fmask==255)]=0
+fmask[where(fmask==90)]=0
+fmask[where(fmask==20)]=0
+fmask[where(fmask==30)]=0
+fmask[where(fmask!=0)]=1
+'''
+
+
 
 
 
@@ -560,6 +598,7 @@ mat_suit_high[where(mat_suit_high>0)]=8-mat_suit_high[where(mat_suit_high>0)]
 
 
 mat_vuln = gdal_array.LoadFile('./various_rasters/primate_vulnerability.tif')
+#mat_vuln*=fmask #filter by forest
 mat_vuln_low=mat_vuln*(mat_suit_low>0)
 mat_vuln_high=mat_vuln*(mat_suit_high>0)
 
@@ -653,9 +692,9 @@ out=open('./results/comparison_aoc_low_int_high.csv','w')
 out.write('category,color,km2_low,km2_intermediate,km2_high\n')
 
 for i in range(11):
-	km2_int=(res_mat==i).sum()
-	km2_low=(res_mat_low==i).sum()
-	km2_high=(res_mat_high==i).sum()
+	km2_int=100*(res_mat==i).sum()
+	km2_low=100*(res_mat_low==i).sum()
+	km2_high=100*(res_mat_high==i).sum()
 	col,name=comp_dict[i]
 	out.write(','.join(map(str,[name,col,km2_low,km2_int,km2_high]))+'\n')
 
@@ -664,75 +703,6 @@ for i in range(11):
 out.close()
 
 
-
-
-
-
-
-################Species Range Losses
-
-
-
-mat_pa = gdal_array.LoadFile('./various_rasters/protected_areas.tif')
-
-scen1=(mat_suit>=5)	# all cells minus the high suitable
-scen2=(mat_suit>=3)	# all cells minus the medium to high suitable
-scen3=(mat_suit>0)	# all cells with minimum suitability
-#mat_pa=1*((mat_pa>0)*(mat_suit>0))
-mask = None
-spp_ranges=[]
-out=open('./results/res_spp_ranges.csv','w')
-out.write('species,sp_range,sp_range_protected,loss_scenario_1,loss_scenario_2,loss_scenario_3\n')
-out.close()
-
-for i in spp:
-	mat = gdal_array.LoadFile('./primate_rasters/'+i+'.tif')
-	mat=(mat>0)*1
-	mat*=mat_land_use
-	mat*=(mat_conc==0)
-	pr=1*((mat>0)*(mat_pa>0))	#protected_range (include lands in excluded land_cover categories)
-	mat*=(mat_pa==0)
-	loss1=mat*scen1*1
-	loss2=mat*scen2*1
-	loss3=mat*scen3*1
-	mat[where(loss3==1)]=2	
-	mat[where(loss2==1)]=3
-	mat[where(loss1==1)]=4
-	mat[where(pr==1)]=5
-	range_0=float((mat>0).sum())
-	range_prot=float((mat==5).sum())
-	range_1=float(((mat>1)*(mat<5)).sum())
-	range_2=float(((mat>2)*(mat<5)).sum())
-	range_3=float(((mat>3)*(mat<5)).sum())
-	spp_ranges.append(range_0)
-	out=open('./results/res_spp_ranges.csv','a')
-	out.write(','.join(map(str,[i,range_0,100*range_prot/range_0,100*range_1/range_0,100*range_2/range_0,100*range_3/range_0]))+'\n')
-	out.close()
-	print i
-
-
-
-
-###average for genera
-a=open('./results/res_spp_ranges.csv','r')
-aa=[i.split(',') for i in a]
-a.close()
-aaa=[[i[0]]+map(float,i[1:]) for i in aa[1:]]
-gen=sorted(list(set([i[0].split()[0] for i in aaa])))
-
-out=open('./results/res_gen_ranges.csv','w')
-out.write('genus,'+','.join(aa[0][1:])+'\n')
-for i in gen:
-	row=[]
-	for j in aaa:
-		if i==j[0].split()[0]:
-			row.append(j[1:])
-	row=array(row)
-	res_gen=[i,str(int(row.mean(0)[0]))]+["{0:.2f}".format(round(j,2)) for j in row.mean(0)[1:]]
-	out.write(','.join(map(str,res_gen))+'\n')
-
-
-out.close()
 
 
 #####
@@ -791,24 +761,25 @@ for i in range(R):
 vals_ok=[i[:4] for i in vals]	#suit,acc,carbon
 indexes=dict([[vals[i][-1],i] for i in range(len(vals))])
 
-
-spp_file=open('./results/res_spp_ranges.csv','r')
-spp_data=[i.split(',') for i in spp_file]
-spp=[i[0] for i in spp_data[1:]]
-spp_ranges=[float(i[1]) for i in spp_data[1:]]
-spp_file.close()
-
-
+spp = sorted(list(set([i[:-4].split('_')[0] for i in listdir('./primate_rasters/')])))
 
 vals_spp=[[] for i in range(len(vals))]
+spp_ranges = []
+out = open('./results/range_adjustment.csv','w')
+out.write('species,iucn_range,range_adjusted\n')
 for sp in range(len(spp)):
 	row=[]
 	mat = gdal_array.LoadFile('./primate_rasters/'+spp[sp]+'.tif')
 	src=rasterio.open('./primate_rasters/'+spp[sp]+'.tif')
 	mat=(mat>0)*1
+	range_iucn = mat.sum()*100
 	mat*=mat_land_use
 	mat*=(mat_conc==0)
+	range_adjusted = mat.sum()*100.0
+	spp_ranges.append(mat.sum()*100.0)
 	mat*=(mat_pa==0)
+	#range_protected = range_adjusted - mat.sum()*100
+	out.write(','.join(map(str,[spp[sp],range_iucn,range_adjusted]))+'\n')
 	mat=mat.astype(numpy.int32,copy=False)
 	mat*=(mat_suit>0)
 	occ=where(mat>0)
@@ -819,13 +790,14 @@ for sp in range(len(spp)):
 	src.close()
 
 
+out.close()
 
 
 
 spp_ranges=array(spp_ranges)
 ranges_0=mean(spp_ranges)
 
-
+spp_iucn_status = [prim_iucn_status_dict[i] for i in spp]
 
 ####EXPLORE ALL SCENARIOS
 
@@ -834,6 +806,7 @@ var_names=['suitability','accessibility','carbon','vulnerability']
 all_mods=[list(i) for i in list(itertools.permutations([0,1,2],1))+list(itertools.permutations([0,1,2],2))+list(itertools.permutations([0,1,2],3))]
 all_mods+=[[3],[]]
 
+
 for model in all_mods:
 	if model!=[]:
 		mod_name='_'.join([var_names[j] for j in model])
@@ -841,24 +814,49 @@ for model in all_mods:
 		mod_name='random'
 	vals=[[vals_ok[k][j] for j in model]+[random()]+[vals_spp[k]] for k in range(len(vals_ok))]
 	out=open('./results/res_'+mod_name+'.csv','w')
-	for rep in range(10):	#we performed 1000 replicates in the actual analyses
+	for rep in range(1000):	#we performed 1000 replicates in the actual analyses
 		if rep>0:
 			for i in range(len(vals)):
 				vals[i][len(model)]=random()
 		vals.sort()
 		ranges_=array(deepcopy(spp_ranges))
 		lost_area=0.0
+		out.write(','.join(map(str,[0.0,0.0,0.0,0.0]))+'\n')
 		sc=0
-		for i in vals:
-			ranges_[i[-1]]-=1.0
-			lost_area+=1.0
-			if sc%25000==0:
-				res=[lost_area,(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<0.70])]
+		for i in vals[:5501]:
+			ranges_[i[-1]]-=100.0
+			lost_area+=100.0
+			if sc%10 == 0:
+				res=[lost_area,(spp_ranges-ranges_).sum(),(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<=0.9]),len([j for j in ranges_/spp_ranges if j<=0.95]),len([j for j in ranges_/spp_ranges if j<1])]
 				out.write(','.join(map(str,res))+'\n')
+			if sc == 2200:
+				out_prim_ranges=open('./results/'+mod_name+'_primate_range_loss_food_half_africa.csv','a')
+				for prim_sp in range(len(spp)):
+					out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+				out_prim_ranges.close()
+			if sc == 2650:
+				out_prim_ranges=open('./results/'+mod_name+'_primate_range_loss_food_biofuel_half_africa.csv','a')
+				for prim_sp in range(len(spp)):
+					out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+				out_prim_ranges.close()
+			if sc == 4400:
+				out_prim_ranges=open('./results/'+mod_name+'_primate_range_loss_food_all_africa.csv','a')
+				for prim_sp in range(len(spp)):
+					out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+				out_prim_ranges.close()
+			if sc == 5300:	
+				out_prim_ranges=open('./results/'+mod_name+'_primate_range_loss_food_biofuel_all_africa.csv','a')
+				for prim_sp in range(len(spp)):
+					out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+				out_prim_ranges.close()
 			sc+=1
-		res=[lost_area,(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<0.70])]
+		res=[lost_area,(spp_ranges-ranges_).sum(),(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<=0.9]),len([j for j in ranges_/spp_ranges if j<=0.95]),len([j for j in ranges_/spp_ranges if j<1])]
 		out.write(','.join(map(str,res))+'\n')
+		print rep
 	out.close()
+
+
+
 
 
 
@@ -878,8 +876,11 @@ for i in vals_a:
 
 
 
+
+
+
 out=open('./results/res_optimization.csv','w')
-for rep in range(10):
+for rep in range(1000):
 	if rep>0:
 		for i in range(len(vals)):
 			vals[i][1]=random()
@@ -887,15 +888,36 @@ for rep in range(10):
 	ranges_=array(deepcopy(spp_ranges))
 	lost_area=0.0
 	sc=0
-	for i in vals:
-		ranges_[i[-1]]-=1.0
-		lost_area+=1.0
-		if sc%25000==0:
-			res=[lost_area,(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<0.70])]
+	for i in vals[:5501]:
+		ranges_[i[-1]]-=100.0
+		lost_area+=100.0
+		if sc%10 == 0:
+			res=[lost_area,(spp_ranges-ranges_).sum(),(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<=0.9]),len([j for j in ranges_/spp_ranges if j<=0.95]),len([j for j in ranges_/spp_ranges if j<1])]
 			out.write(','.join(map(str,res))+'\n')
+		if sc == 2200:
+			out_prim_ranges=open('./results/optimization_primate_range_loss_food_half_africa.csv','a')
+			for prim_sp in range(len(spp)):
+				out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+			out_prim_ranges.close()
+		if sc == 2650:
+			out_prim_ranges=open('./results/optimization_primate_range_loss_food_biofuel_half_africa.csv','a')
+			for prim_sp in range(len(spp)):
+				out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+			out_prim_ranges.close()
+		if sc == 4400:
+			out_prim_ranges=open('./results/optimization_primate_range_loss_food_all_africa.csv','a')
+			for prim_sp in range(len(spp)):
+				out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+			out_prim_ranges.close()
+		if sc == 5300:
+			out_prim_ranges=open('./results/optimization_primate_range_loss_food_biofuel_all_africa.csv','a')
+			for prim_sp in range(len(spp)):
+				out_prim_ranges.write(','.join(map(str,[spp[prim_sp],spp_iucn_status[prim_sp],spp_ranges[prim_sp],ranges_[prim_sp]]))+'\n')
+			out_prim_ranges.close()	
 		sc+=1
-	res=[lost_area,(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<0.70])]
+	res=[lost_area,(spp_ranges-ranges_).sum(),(spp_ranges-ranges_).mean(),len([j for j in ranges_/spp_ranges if j<=0.9]),len([j for j in ranges_/spp_ranges if j<=0.95]),len([j for j in ranges_/spp_ranges if j<1])]
 	out.write(','.join(map(str,res))+'\n')
+	print rep
 
 
 
@@ -950,7 +972,7 @@ mask = None
 with rasterio.drivers():
 	with rasterio.open('./various_rasters/primate_vulnerability.tif') as src:
 		image = src.read(1) # first band
-		image.dtype='int32'
+		#image.dtype='int32'
 		results = ({'properties': {'raster_val': v}, 'geometry': s} for i, (s, v) in enumerate(shapes(image, mask=mask, transform=src.affine)))
 
 
@@ -1137,7 +1159,7 @@ for xy, info in zip(getattr(m,shpname), getattr(m,info)):
 
 plt.savefig('./results/areas_of_compromise.pdf',dpi=300)
 
-
+clear=[plt.clf() for i in range(100000)]
 
 
 
@@ -1193,11 +1215,266 @@ out.close()
 
 
 
+
+####
+
+
+#####SENSITIVITY ANALYSIS OF PRIMATE RANGES
+rst_fn = './various_rasters/africa.tif'#Path to reference file'
+rst = rasterio.open(rst_fn)
+
+mat = gdal_array.LoadFile(rst_fn)
+sss=mat.shape
+
+
+
+
+
+mat_land_use = gdal_array.LoadFile('./various_rasters/land_use.tif')
+mat_land_use[where(mat_land_use==40)]=0
+mat_land_use[where(mat_land_use==50)]=0
+mat_land_use[where(mat_land_use==60)]=0
+mat_land_use[where(mat_land_use==70)]=0
+mat_land_use[where(mat_land_use==80)]=0
+mat_land_use[where(mat_land_use==81)]=0
+mat_land_use[where(mat_land_use==200)]=0
+mat_land_use[where(mat_land_use==255)]=0
+mat_land_use[where(mat_land_use==90)]=1
+mat_land_use[where(mat_land_use!=0)]=1
+
+
+
+mat_pa = gdal_array.LoadFile('./various_rasters/protected_areas.tif')
+mat_conc = gdal_array.LoadFile('./various_rasters/po_conc.tif')
+
+
+
+
+mat_suit = gdal_array.LoadFile('./various_rasters/suitability.tif')
+mat_suit*=(mat_suit<8)	#9 is water, 8 is not suitable
+mat_suit*=mat_land_use
+mat_suit[where(mat_conc>0)]=0
+mat_suit[where(mat_pa!=0)]=0
+mat_suit_mask = (mat_suit>0)*1
+
+
+def log_plus(x):
+	return log(x+1)
+
+
+def get_vuln_class(vuln):
+	if 0<vuln<2:
+		return 1
+	elif 2<=vuln<4:
+		return 2
+	elif vuln>=4:
+		return 2
+	else:
+		return 0
+
+
+get_vuln_class_mat=vectorize(get_vuln_class)
+
+
+
+log_plus_mat=vectorize(log_plus)
+
+
+spp = [i.split('.')[0] for i in listdir('./primate_rasters') if 'adjusted' not in i]
+
+m_0=zeros(sss)
+for i in spp:
+	mat = gdal_array.LoadFile('./primate_rasters/'+i+'.tif')
+	m_0+=mat
+
+
+m_0*=mat_suit_mask
+mat_vuln_0 = log_plus_mat(m_0)
+mat_vuln_class_0 = get_vuln_class_mat(mat_vuln_0) 
+
+suit_cells_n=float((mat_vuln_class_0>0).sum())
+
+from numpy import arange
+out = open('./results/sensitivity_vuln_index.csv','a')
+for eee in arange(0.01,0.51,0.01):
+	m0=zeros(sss)
+	for i in spp:
+		mat = gdal_array.LoadFile('./primate_rasters/'+i+'.tif')
+		xxx = where(mat>0)
+		l = len(xxx[0])
+		to_del = sample(range(l),int(round(l*eee)))
+		for x in to_del:
+			mat[xxx[0][x],xxx[1][x]] = 0	
+		m0+=mat
+	m0*=mat_suit_mask
+	mat_vuln=log_plus_mat(m0)
+	mat_vuln_class = get_vuln_class_mat(mat_vuln)
+	out.write(','.join(map(str,[eee,((mat_vuln_class_0!=mat_vuln_class)*(mat_vuln_class_0>0)).sum()/suit_cells_n
+]))+'\n')
+
+
+
+out.close()
+
+
+
+
+###reduction of ranges through land use map
+
+
+mat_land_use = gdal_array.LoadFile('./various_rasters/land_use.tif')
+mat_land_use[where(mat_land_use==40)]=0
+mat_land_use[where(mat_land_use==50)]=0
+mat_land_use[where(mat_land_use==60)]=0
+mat_land_use[where(mat_land_use==70)]=0
+mat_land_use[where(mat_land_use==80)]=0
+mat_land_use[where(mat_land_use==81)]=0
+mat_land_use[where(mat_land_use==200)]=0
+mat_land_use[where(mat_land_use==255)]=0
+mat_land_use[where(mat_land_use==90)]=1
+mat_land_use[where(mat_land_use!=0)]=1
+
+
+
+rst_fn = './various_rasters/africa.tif'#Path to reference file'
+rst = rasterio.open(rst_fn)
+
+mat = gdal_array.LoadFile(rst_fn)
+sss=mat.shape
+
+
+meta = rst.meta.copy()
+meta.update(compress='lzw')
+#meta.update(dtype='uint32')
+
+
+
+spp = [i.split('.')[0] for i in listdir('./primate_rasters')]
+res = []
+for i in spp:
+	mat = gdal_array.LoadFile('./primate_rasters/'+i+'.tif')
+	#mat *= (mat_suit>0)
+	iucn_range = (mat>0).sum()
+	mat *= mat_land_use
+	filt_range = (mat>0).sum()
+	res.append([i, iucn_range, filt_range])
+	print i,filt_range/float(iucn_range)
+	out=rasterio.open('./primate_rasters/'+i+'_adjusted.tif', 'w', **meta)
+	out.write(mat.astype(rasterio.uint8),1)
+	out.close()
+
+
+
+
+out=open('./results/iucn_range_reduction_land_use.csv','a')
+for i in res:
+	out.write(','.join(map(str,i))+'\n')
+
+
+out.close()
+
+
+
+
+#####MAKE MAPS OF PRIMATES' RANGE REDUCTION BY LAND USE FILTERING
+
+
+
+colors = ['#ffffff','#000000']
+
+color_map = ListedColormap(colors)
+
+
+def convertXY(xy_source, inproj, outproj):
+    # function to convert coordinates
+    shape = xy_source[0, :, :].shape
+    size = xy_source[0, :, :].size
+    # the ct object takes and returns pairs of x,y, not 2d grids
+    # so the the grid needs to be reshaped (flattened) and back.
+    ct = osr.CoordinateTransformation(inproj, outproj)
+    xy_target = np.array(ct.TransformPoints(xy_source.reshape(2, size).T))
+    xx = xy_target[:, 0].reshape(shape)
+    yy = xy_target[:, 1].reshape(shape)
+    return xx, yy
+
+# Read the data and metadata
+
+
+fff = [i for i in listdir('./primate_rasters') if i[-3:] == 'tif']
+for sp in fff:
+	ds = gdal.Open("./primate_rasters/"+sp)
+	gt = ds.GetGeoTransform()
+	proj = ds.GetProjection()
+	data = ds.ReadAsArray()
+	#data = np.flipud(data)
+	xres = gt[1]
+	yres = gt[5]
+	xmin = gt[0] + xres * 0.5
+	xmax = gt[0] + (xres * data.shape[1]) - xres * 0.5
+	ymin = gt[3] + (yres * data.shape[0]) - yres * 0.5
+	ymax = gt[3] + yres * 0.5
+	ds = None
+	xy_source = np.mgrid[xmin:xmax + xres:xres, ymax:ymin + yres:yres]
+	in_proj = osr.SpatialReference()
+	in_proj.ImportFromWkt(proj)
+	out_proj = osr.SpatialReference()
+	out_proj.ImportFromEPSG(4326)
+	xx, yy = convertXY(xy_source, in_proj, out_proj)
+	mlon,mlat,Mlon,Mlat = xx.min(),yy.min(),xx.max(),yy.max()
+	plt.rcParams['hatch.linewidth'] = 0.1
+	m = Basemap(resolution='l', area_thresh=100000., projection='cyl',llcrnrlat=-35, llcrnrlon=-20,urcrnrlat=35, urcrnrlon=52)
+	m.drawcoastlines(linewidth=0.1)
+	xx_m, yy_m = m(xx, yy)  # Convert latlong coordinates to basemap proj
+	im = m.pcolormesh(xx_m, yy_m, data.T, cmap=color_map)
+	plt.title(sp[:-4].split('_')[0])
+	plt.savefig("./primate_range_reduction_figures/"+sp[:-3]+"png", dpi=300)
+	clear=[plt.clf() for i in range(100000)]
+
+
+
+
+
+
+
+###########
+from load import csv_
+from numpy import mean
+fff = []
+for scen in ['vulnerability','suitability','accessibility','carbon','random']:
+	fff.append(csv_('./results/'+scen+'_primate_range_loss_food_biofuel_half_africa.csv'))
+
+
+
+
+spp=sorted(list(set([i[0] for i in fff[0] if float(i[2])>0])))
+res=[]
+for sp in spp:
+	ROW=[]
+	for ff in range(5):
+		row=[]
+		for j in fff[ff]:
+			if sp==j[0]:
+				status = j[1]
+				row.append(1-float(j[3])/float(j[2]))
+		ROW.append(mean(row))	
+	res.append([sp,status]+ROW)
+	print res[-1]
+
+
+
+
+out=open('table_S1.csv','w')
+out.write('species,IUCN_status,vulnerability,suitability,accessibility,carbon,random\n')
+for i in res:
+	out.write(','.join(map(str,[i[0],i[1],round(i[2]*100,1),round(i[3]*100,1),round(i[4]*100,1),round(i[5]*100,1),round(i[6]*100,1)]))+'\n')
+
+
+out.close()
+
+
+
+
 ###MAKE FIGS 3-4 and supplementary figures
 
 os.system("Rscript ./make_plots.R")
-
-
-
-
 
