@@ -26,6 +26,6 @@ The development version of this repository is available on GitHub at https://git
 
 ## Figure
 
-![**Figure 2:** Spatial overlap between oil palm suitability and primate vulnerability, mapped at 1 km2 resolution. Numbers in the legend indicate the proportion of each class relative to the total suitable land.](Fig2.png)
+![](figure2.png)
 
-**Figure 2:**  Spatial overlap between oil palm suitability and primate vulnerability, mapped at 1 km2 resolution. Numbers in the legend indicate the proportion of each class relative to the total suitable land.
+**Figure 2:**  Spatial overlap between oil palm suitability and primate vulnerability, mapped at 100 km2 resolution. Numbers in the legend indicate the proportion of each class relative to the total suitable land.
