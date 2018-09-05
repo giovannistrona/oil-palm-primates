@@ -1,14 +1,11 @@
 # oil-palm-primates
 
-<script type='text/javascript' src='https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js'></script>
-
 This repository includes the Python and R code associated to the following paper:
 
 **Strona G., S. D. Stringer, G. Vieilledent, Z. Szantoi, J. Garcia-Ulloa, S. Wich.** 2018. Small room for compromise between oil palm cultivation and primate conservation in Africa. _Proceedings of the National Academy of Sciences PNAS_. **115**(35): 8811-8816. 
 \[DOI:[10.1073/pnas.1804775115](https://doi.org/10.1073/pnas.1804775115)\].
 [![manuscript in pdf](article/logo-pdf.png "manuscript in pdf")](article/Strona2018-PNAS.pdf) /
 Supplementary materials [![supplements](article/logo-zip.png "supplements")](article/Strona2018-PNAS-SM.pdf)
-<div class='altmetric-embed' data-badge-type='donut' data-doi="10.1073/pnas.1804775115"></div>
 
 ## Description
 
